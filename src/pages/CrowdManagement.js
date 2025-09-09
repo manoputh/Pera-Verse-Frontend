@@ -25,6 +25,8 @@ const CrowdManagement = () => {
   const [viewMode, setViewMode] = useState("current"); // "current" | "predicted"
   const [selectedBuilding, setSelectedBuilding] = useState("all");
   const [threshold, setThreshold] = useState(80); // adjustable warning threshold
+  const [searchTerm, setSearchTerm] = useState("");
+  const [suggestions, setSuggestions] = useState([]);
 
   // TODO: Replace with real API endpoint from other team
   const API_URL = "http://localhost:5000/api/crowd";
@@ -51,10 +53,28 @@ const CrowdManagement = () => {
     }
   };
 
-  // Filter data by building
+  // Update suggestions as user types
+  useEffect(() => {
+    if (searchTerm.trim() === "") {
+      setSuggestions([]);
+      return;
+    }
+    const lowerSearch = searchTerm.toLowerCase();
+    setSuggestions(
+      crowdData
+        .filter((d) => d.buildingName.toLowerCase().includes(lowerSearch))
+        .map((d) => d.buildingName)
+    );
+  }, [searchTerm, crowdData]);
+
+  // Filter data by building or search term
   const filteredData =
     selectedBuilding === "all"
-      ? crowdData
+      ? searchTerm.trim()
+        ? crowdData.filter((d) =>
+            d.buildingName.toLowerCase().includes(searchTerm.toLowerCase())
+          )
+        : crowdData
       : crowdData.filter((d) => String(d.buildingId) === String(selectedBuilding));
 
   // Detect alerts based on predicted counts
@@ -94,8 +114,8 @@ const CrowdManagement = () => {
         </div>
       )}
 
-      {/* Controls */}
-      <div className="flex space-x-4 items-center">
+      {/* Controls + Search Bar */}
+      <div className="flex flex-wrap items-center space-x-4 mb-4">
         <label>
           View Mode:{" "}
           <select
@@ -123,6 +143,37 @@ const CrowdManagement = () => {
             ))}
           </select>
         </label>
+
+        {/* Search Bar */}
+        <div className="relative w-64">
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Search buildings..."
+            className="w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-400 shadow-sm bg-white text-gray-700 transition-all duration-150"
+          />
+          {suggestions.length > 0 && (
+            <ul className="absolute z-10 bg-white border border-gray-200 rounded-lg mt-1 w-full shadow">
+              {suggestions.map((name, idx) => (
+                <li
+                  key={name + idx}
+                  className="px-3 py-2 cursor-pointer hover:bg-blue-100"
+                  onClick={() => {
+                    setSearchTerm(name);
+                    setSuggestions([]);
+                    const building = crowdData.find(
+                      (d) => d.buildingName === name
+                    );
+                    if (building) setSelectedBuilding(building.buildingId);
+                  }}
+                >
+                  {name}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
 
       {/* Heat Map */}
@@ -139,9 +190,9 @@ const CrowdManagement = () => {
         {/* Line Chart */}
         <div className="p-4 bg-white rounded-xl shadow">
           <h2 className="text-lg font-semibold mb-2">Crowd Trend</h2>
-          <ResponsiveContainer width="50%" height={250}>
+          <ResponsiveContainer width="100%" height={250}>
             <LineChart data={filteredData}>
-              <XAxis dataKey="timestamp" />
+              <XAxis dataKey="buildingName" />
               <YAxis />
               <Tooltip />
               <Legend />
@@ -154,9 +205,9 @@ const CrowdManagement = () => {
         {/* Bar Chart */}
         <div className="p-4 bg-white rounded-xl shadow">
           <h2 className="text-lg font-semibold mb-2">Current vs Predicted</h2>
-          <ResponsiveContainer width="50%" height={250}>
+          <ResponsiveContainer width="100%" height={250}>
             <BarChart data={filteredData}>
-              <XAxis dataKey="buildingId" />
+              <XAxis dataKey="buildingName" />
               <YAxis />
               <Tooltip />
               <Legend />

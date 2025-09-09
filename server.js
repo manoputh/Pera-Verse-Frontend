@@ -1,9 +1,20 @@
 const express = require('express');
-const cors = require('cors'); // Import the cors middleware
+const cors = require('cors');
+const { Pool } = require('pg');
 const app = express();
 const PORT = 5000;
 
-app.use(cors()); // Enable CORS for all routes
+app.use(cors());
+app.use(express.json());
+
+// PostgreSQL connection
+const pool = new Pool({
+  user: 'postgres',
+  host: 'localhost',
+  database: 'peraverse',
+  password: 'MND=mano#99', // replace with your password
+  port: 5432,
+});
 
 // Mock crowd data sets for different times
 const crowdDataSets = [
@@ -40,12 +51,59 @@ const crowdDataSets = [
 ];
 
 // API endpoint
-app.get('/api/crowd', (req, res) => {
-  // Simulate live data by cycling through datasets every 5 seconds
+app.get('/api/crowd', async (req, res) => {
   const now = new Date();
   const seconds = now.getSeconds();
   const index = Math.floor((seconds % 15) / 5); // 0, 1, or 2
-  res.json(crowdDataSets[index]);
+  const dataSet = crowdDataSets[index];
+  res.json(dataSet);
+
+  // Store each building's data in the database
+  for (const d of dataSet) {
+    try {
+      await pool.query(
+        'INSERT INTO crowd_history (building_name, current_count, predicted_count, timestamp) VALUES ($1, $2, $3, $4)',
+        [d.buildingName, d.currentCount, d.predictedCount, d.timestamp]
+      );
+    } catch (err) {
+      // Optionally log error, but don't block response
+      console.error('DB insert error:', err.message);
+    }
+  }
+});
+
+// Save crowd data
+app.post('/api/crowd-history', async (req, res) => {
+  const { buildingName, currentCount, predictedCount, timestamp } = req.body;
+  try {
+    await pool.query(
+      'INSERT INTO crowd_history (building_name, current_count, predicted_count, timestamp) VALUES ($1, $2, $3, $4)',
+      [buildingName, currentCount, predictedCount, timestamp]
+    );
+    res.status(201).json({ message: 'Data saved' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get all crowd history
+app.get('/api/crowd-history', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM crowd_history');
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Test DB connection
+app.get('/api/test-db', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT NOW()');
+    res.json({ connected: true, time: result.rows[0].now });
+  } catch (err) {
+    res.status(500).json({ connected: false, error: err.message });
+  }
 });
 
 app.listen(PORT, () => {
